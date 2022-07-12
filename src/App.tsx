@@ -1,10 +1,13 @@
-import { DragDropContext, DropResult } from "react-beautiful-dnd";
+import { DragDropContext, Droppable, DropResult } from "react-beautiful-dnd";
 import { useRecoilState } from "recoil";
 import styled from "styled-components";
 import { boardState } from "./atoms";
-import DroppableBoard from "./components/DroppableBoard";
+import AddBoard from "./components/AddBoard";
+import ShowBoard from "./components/ShowBoard";
 
 const Title = styled.div`
+  position: sticky;
+  top: 0%;
   min-width: 680px;
   height: 15vh;
   display: flex;
@@ -24,7 +27,7 @@ const Wrapper = styled.div`
   display: flex;
   max-width: 680px;
   width: 100%;
-  height: 85vh;
+  height: auto;
   justify-content: center;
   align-items: center;
   margin: 0 auto;
@@ -32,78 +35,85 @@ const Wrapper = styled.div`
 const Boards = styled.div`
   display: grid;
   gap: 15px;
-  grid-template-columns: repeat(4, 1fr);
-  /* forward */
-  div:nth-child(2) {
-    h2 {
-      background-color: red;
-    }
-  }
-  /* midfielder */
-  div:nth-child(3) {
-    h2 {
-      background-color: green;
-    }
-  }
-  /* defender */
-  div:nth-child(4) {
-    h2 {
-      background-color: blue;
-    }
-  }
+  grid-template-columns: repeat(3, 1fr);
+`;
+const Player = styled.div`
+  display: flex;
+  justify-content: center;
+  margin-top: 30px;
 `;
 
 function App() {
   const [boards, setBoards] = useRecoilState(boardState);
 
   const onDragEnd = (info: DropResult) => {
-    console.log(info);
-    // detination: 도착지점, source: 출발지점, dragID: 카드 값
-    const { destination, source, draggableId } = info;
+    // detination: 도착지점, source: 출발지점, dragID: 값을 갖고있는 객체의 id
+    const { destination, source } = info;
     // 제자리 이동시 return
     if (!destination) return;
 
-    // 동일 보드 내에서 움직이는지
-    if (destination?.droppableId === source.droppableId) {
+    // 이동하고자 하는 보드 이름
+    const startBoardName = source.droppableId;
+    const endBoardName = destination.droppableId;
+
+    // 🔥 보드 이동
+    if (startBoardName === "boards" && endBoardName === "boards") {
+      // 옮기고자 하는 인덱스번호 (정수)
+      const end = destination?.index;
+      // 출발하는 인덱스번호 (정수)
+      const start = source.index;
+
       setBoards((currentBoards) => {
-        const boardName = source.droppableId;
-        // 움직인 보드(arr) 가져오기
-        const editBoard = [...currentBoards[boardName]];
+        const arrs = Object.entries(currentBoards);
+        const movedArr = arrs[start];
+        // 옮기고자 하는 배열 삭제
+        arrs.splice(start, 1);
+        // 옮기고자 하는 곳에 배열 삽입
+        arrs.splice(end, 0, movedArr);
+        const editBoards = Object.fromEntries(arrs);
+        return { ...editBoards };
+      });
+    }
+    // 🔥 같은 보드 내에 카드 이동
+    else if (startBoardName === endBoardName) {
+      setBoards((currentBoards) => {
+        // 수정해야 할 보드(arr) 가져오기
+        const editBoard = [...currentBoards[startBoardName]];
+        // 이동할 카드(obj) 가져오기
+        const playerObj = editBoard[source.index];
+
         // 1. 출발지점 index에 값 삭제
         editBoard.splice(source.index, 1);
         // 2. 도착지점 index에 값 넣기
-        editBoard.splice(destination?.index, 0, draggableId);
+        editBoard.splice(destination?.index, 0, playerObj);
+
         return {
           ...currentBoards,
-          [boardName]: editBoard,
+          [startBoardName]: editBoard,
         };
       });
     }
-    // 다른 보드끼리의 이동
+
+    // 🔥 서로 다른 보드에 카드 이동
     if (destination.droppableId !== source.droppableId) {
       setBoards((currentBoards) => {
-        // 수정될 보드 이름
-        const startName = source.droppableId;
-        const endName = destination.droppableId;
-        // 수정할 보드 값 가져오기
-        const startBoard = [...currentBoards[startName]];
-        const endBoard = [...currentBoards[endName]];
+        // 서로 이동할 보드(arr) 가져오기
+        const startBoard = [...currentBoards[startBoardName]];
+        const endBoard = [...currentBoards[endBoardName]];
+        // 이동할 카드(obj) 가져오기
+        const playerObj = startBoard[source.index];
 
         // 1. 출발 board 수정
         startBoard.splice(source.index, 1);
         // 2. 도착 board 수정
-        endBoard.splice(destination.index, 0, draggableId);
+        endBoard.splice(destination.index, 0, playerObj);
         return {
           ...currentBoards,
-          [startName]: startBoard,
-          [endName]: endBoard,
+          [startBoardName]: startBoard,
+          [endBoardName]: endBoard,
         };
       });
     }
-
-    // source: 출발지점
-    // destination: 도착지점
-    // draggableId: 움직이고자 하는 값
   };
   return (
     <DragDropContext onDragEnd={onDragEnd}>
@@ -114,17 +124,26 @@ function App() {
           alt="ten"
         />
       </Title>
-      <Wrapper>
-        <Boards>
-          {Object.keys(boards).map((boardName) => (
-            <DroppableBoard
-              key={boardName}
-              boardName={boardName}
-              board={boards[boardName]}
-            />
-          ))}
-        </Boards>
-      </Wrapper>
+      <Player>
+        <AddBoard />
+      </Player>
+      <Droppable droppableId="boards" direction="horizontal" type="board">
+        {(magic) => (
+          <Wrapper>
+            <Boards ref={magic.innerRef} {...magic.droppableProps}>
+              {Object.keys(boards).map((boardName, index) => (
+                <ShowBoard
+                  key={boardName}
+                  boardName={boardName}
+                  board={boards[boardName]}
+                  index={index}
+                />
+              ))}
+              {magic.placeholder}
+            </Boards>
+          </Wrapper>
+        )}
+      </Droppable>
     </DragDropContext>
   );
 }
